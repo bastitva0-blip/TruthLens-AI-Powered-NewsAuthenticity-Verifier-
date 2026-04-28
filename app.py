@@ -7,7 +7,7 @@ import google.generativeai as genai
 
 app = Flask(__name__, template_folder='.')
 
-DEFAULT_GEMINI_API_KEY = "AIzaSyDvdEPpPWh6gRJUG5dpCcn-dobE3-U3Vhc"
+DEFAULT_GEMINI_API_KEY = "788741917231"
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', DEFAULT_GEMINI_API_KEY)
 
 genai.configure(api_key=GEMINI_API_KEY)
