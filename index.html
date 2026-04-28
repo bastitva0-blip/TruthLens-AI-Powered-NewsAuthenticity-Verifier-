@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TruthLens — AI News Verifier</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #18181f;
+      --border: rgba(255,255,255,0.07);
+      --accent: #e8c547;
+      --accent2: #ff6b4a;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --real: #4ade80;
+      --fake: #f87171;
+      --misleading: #fb923c;
+      --unverifiable: #94a3b8;
+      --glow: rgba(232, 197, 71, 0.15);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(232,197,71,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232,197,71,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .container {
+      position: relative;
+      z-index: 2;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* Header */
+    header {
+      padding: 48px 0 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+
+    .logo-mark {
+      width: 44px;
+      height: 44px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-weight: 900;
+      font-size: 22px;
+      color: #0a0a0f;
+      flex-shrink: 0;
+    }
+
+    .logo-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .tagline {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      letter-spacing: 0.05em;
+      line-height: 1.6;
+    }
+
+    /* Hero */
+    .hero {
+      margin-bottom: 40px;
+    }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(36px, 6vw, 64px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 520px;
+      line-height: 1.7;
+    }
+
+    /* Input area */
+    .input-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 28px;
+      margin-bottom: 32px;
+      position: relative;
+    }
+
+    .input-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+    }
+
+    .input-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-label::before {
+      content: '//';
+      opacity: 0.5;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 16px;
+      resize: vertical;
+      min-height: 180px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea::placeholder {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    textarea:focus {
+      border-color: rgba(232,197,71,0.4);
+    }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .char-count {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .btn-analyze {
+      background: var(--accent);
+      color: #0a0a0f;
+      border: none;
+      padding: 12px 28px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-analyze:hover:not(:disabled) {
+      background: #f5d04a;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px var(--glow);
+    }
+
+    .btn-analyze:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+    }
+
+    .loading.active { display: block; }
+
+    .scan-animation {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      position: relative;
+    }
+
+    .scan-ring {
+      position: absolute;
+      inset: 0;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .scan-ring:nth-child(2) {
+      inset: 10px;
+      border-top-color: var(--accent2);
+      animation-duration: 0.7s;
+      animation-direction: reverse;
+    }
+
+    .scan-dot {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:1;transform:translate(-50%,-50%) scale(1)} 50%{opacity:0.3;transform:translate(-50%,-50%) scale(0.6)} }
+
+    .loading-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--muted);
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Results */
+    #results { display: none; }
+    #results.active { display: block; animation: fadeUp 0.5s ease; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Verdict Banner */
+    .verdict-banner {
+      padding: 32px 28px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .verdict-banner.REAL {
+      background: rgba(74, 222, 128, 0.08);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+    .verdict-banner.FAKE {
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+    }
+    .verdict-banner.MISLEADING {
+      background: rgba(251, 146, 60, 0.08);
+      border: 1px solid rgba(251, 146, 60, 0.3);
+    }
+    .verdict-banner.UNVERIFIABLE {
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .verdict-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .verdict-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .verdict-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 48px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+
+    .REAL .verdict-text { color: var(--real); }
+    .FAKE .verdict-text { color: var(--fake); }
+    .MISLEADING .verdict-text { color: var(--misleading); }
+    .UNVERIFIABLE .verdict-text { color: var(--unverifiable); }
+
+    .confidence-wrap {
+      text-align: right;
+    }
+
+    .confidence-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+
+    .confidence-num {
+      font-family: 'Playfair Display', serif;
+      font-size: 48px;
+      font-weight: 900;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .confidence-bar-wrap {
+      margin-top: 12px;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    .confidence-bar {
+      height: 100%;
+      background: var(--accent);
+      transition: width 1s ease;
+    }
+
+    .verdict-summary {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-style: italic;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    /* Analysis grid */
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 640px) {
+      .analysis-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title .icon {
+      font-size: 14px;
+    }
+
+    .card-full {
+      grid-column: 1 / -1;
+    }
+
+    /* List items */
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--surface2);
+    }
+
+    .tag.red { border-color: rgba(248,113,113,0.4); color: var(--fake); background: rgba(248,113,113,0.06); }
+    .tag.green { border-color: rgba(74,222,128,0.4); color: var(--real); background: rgba(74,222,128,0.06); }
+    .tag.orange { border-color: rgba(251,146,60,0.4); color: var(--misleading); background: rgba(251,146,60,0.06); }
+
+    /* Analysis text */
+    .analysis-text {
+      font-size: 13px;
+      line-height: 1.75;
+      color: #c0c0d0;
+    }
+
+    /* Fact-check table */
+    .fact-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .fact-table td {
+      padding: 10px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .fact-table tr:last-child td { border-bottom: none; }
+
+    .fact-claim {
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      width: 40%;
+    }
+
+    .fact-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      padding: 3px 8px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .fact-badge.TRUE { background: rgba(74,222,128,0.15); color: var(--real); }
+    .fact-badge.FALSE { background: rgba(248,113,113,0.15); color: var(--fake); }
+    .fact-badge.PARTIALLY { background: rgba(251,146,60,0.15); color: var(--misleading); }
+    .fact-badge.UNVERIFIABLE { background: rgba(148,163,184,0.15); color: var(--unverifiable); }
+
+    .fact-explain {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* Recommendation */
+    .recommendation {
+      background: var(--surface2);
+      border-left: 3px solid var(--accent);
+      padding: 16px 20px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* Error */
+    .error-msg {
+      display: none;
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.3);
+      padding: 16px 20px;
+      color: var(--fake);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+
+    .error-msg.active { display: block; }
+
+    /* Reset btn */
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 10px 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 32px;
+    }
+
+    .btn-reset:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+      margin-top: 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    footer p {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    footer p span { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <div class="container">
+    <header>
+      <div class="logo-mark">T</div>
+      <div class="logo-text">Truth<span>Lens</span></div>
+      <div class="tagline">AI-Powered News<br>Authenticity Verifier</div>
+    </header>
+
+    <div class="hero">
+      <h1>Is this news<br><em>real or fake?</em></h1>
+      <p>Paste any news article, headline, or claim. Our AI powered by Google Gemini will analyze it for authenticity, bias, and credibility in seconds.</p>
+    </div>
+
+    <!-- Input -->
+    <div class="input-card">
+      <div class="input-label">Paste news or claim to analyze</div>
+      <textarea id="newsInput" placeholder="Paste a news article, headline, social media post, or any claim you want to verify...&#10;&#10;Example: 'Scientists discover that drinking coffee daily reduces the risk of cancer by 50% according to a new study from Harvard University.'"></textarea>
+      <div class="input-footer">
+        <div class="char-count"><span id="charCount">0</span> characters</div>
+        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeNews()">
+          <span>⟳</span> Analyze Now
+        </button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="scan-animation">
+        <div class="scan-ring"></div>
+        <div class="scan-ring"></div>
+        <div class="scan-dot"></div>
+      </div>
+      <div class="loading-text">Analyzing with Gemini AI...</div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+      <button class="btn-reset" onclick="resetForm()">← Analyze Another</button>
+
+      <!-- Verdict Banner -->
+      <div class="verdict-banner" id="verdictBanner">
+        <div class="verdict-top">
+          <div>
+            <div class="verdict-label">Verdict</div>
+            <div class="verdict-text" id="verdictText">—</div>
+          </div>
+          <div class="confidence-wrap">
+            <div class="confidence-label">AI Confidence</div>
+            <div class="confidence-num" id="confidenceNum">—</div>
+          </div>
+        </div>
+        <div class="confidence-bar-wrap">
+          <div class="confidence-bar" id="confidenceBar" style="width:0%"></div>
+        </div>
+        <div class="verdict-summary" id="summaryText"></div>
+      </div>
+
+      <!-- Grid -->
+      <div class="analysis-grid">
+
+        <!-- Detailed Analysis -->
+        <div class="card card-full">
+          <div class="card-title"><span class="icon">🔍</span>Detailed Analysis</div>
+          <div class="analysis-text" id="analysisText"></div>
+        </div>
+
+        <!-- Red Flags -->
+        <div class="card">
+          <div class="card-title"><span class="icon">🚩</span>Red Flags</div>
+          <div class="tag-list" id="redFlags"></div>
+        </div>
+
+        <!-- Credibility Factors -->
+        <div class="card">
+          <div class="card-title"><span class="icon">✓</span>Credibility Factors</div>
+          <div class="tag-list" id="credibilityFactors"></div>
+        </div>
+
+        <!-- Bias Indicators -->
+        <div class="card">
+          <div class="card-title"><span class="icon">⚖</span>Bias Indicators</div>
+          <div class="tag-list" id="biasIndicators"></div>
+        </div>
+
+        <!-- Fact Check Points -->
+        <div class="card">
+          <div class="card-title"><span class="icon">📋</span>Claim-by-Claim Check</div>
+          <table class="fact-table" id="factTable"></table>
+        </div>
+
+        <!-- Recommendation -->
+        <div class="card card-full">
+          <div class="card-title"><span class="icon">💡</span>Recommendation</div>
+          <div class="recommendation" id="recommendation"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer>
+      <p>Powered by <span>Google Gemini 1.5 Flash</span></p>
+      <p>TruthLens — Not a substitute for professional fact-checking</p>
+    </footer>
+  </div>
+
+  <script>
+    const textarea = document.getElementById('newsInput');
+    const charCount = document.getElementById('charCount');
+
+    textarea.addEventListener('input', () => {
+      charCount.textContent = textarea.value.length;
+    });
+
+    async function analyzeNews() {
+      const newsText = textarea.value.trim();
+      if (!newsText || newsText.length < 20) {
+        showError('Please enter at least 20 characters of news content to analyze.');
+        return;
+      }
+
+      // UI State
+      document.getElementById('errorMsg').classList.remove('active');
+      document.getElementById('results').classList.remove('active');
+      document.getElementById('loading').classList.add('active');
+      document.getElementById('analyzeBtn').disabled = true;
+
+      try {
+        const response = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ news: newsText })
+        });
+
+        const data = await response.json();
+        document.getElementById('loading').classList.remove('active');
+
+        if (!response.ok || !data.success) {
+          showError(data.error || 'Analysis failed. Please try again.');
+          return;
+        }
+
+        renderResults(data.result);
+      } catch (err) {
+        document.getElementById('loading').classList.remove('active');
+        showError('Network error. Make sure the server is running.');
+      } finally {
+        document.getElementById('analyzeBtn').disabled = false;
+      }
+    }
+
+    function renderResults(r) {
+      const verdict = r.verdict || 'UNVERIFIABLE';
+      const confidence = r.confidence || 0;
+
+      // Banner
+      const banner = document.getElementById('verdictBanner');
+      banner.className = `verdict-banner ${verdict}`;
+      document.getElementById('verdictText').textContent = verdict;
+      document.getElementById('confidenceNum').textContent = `${confidence}%`;
+      document.getElementById('summaryText').textContent = r.summary || '';
+
+      setTimeout(() => {
+        document.getElementById('confidenceBar').style.width = `${confidence}%`;
+      }, 200);
+
+      // Analysis
+      document.getElementById('analysisText').textContent = r.analysis || '';
+
+      // Red Flags
+      const rfEl = document.getElementById('redFlags');
+      rfEl.innerHTML = '';
+      (r.red_flags || []).forEach(flag => {
+        rfEl.innerHTML += `<span class="tag red">${flag}</span>`;
+      });
+      if (!r.red_flags?.length) rfEl.innerHTML = `<span class="tag">None detected</span>`;
+
+      // Credibility
+      const cfEl = document.getElementById('credibilityFactors');
+      cfEl.innerHTML = '';
+      (r.credibility_factors || []).forEach(f => {
+        cfEl.innerHTML += `<span class="tag green">${f}</span>`;
+      });
+      if (!r.credibility_factors?.length) cfEl.innerHTML = `<span class="tag">None detected</span>`;
+
+      // Bias
+      const biEl = document.getElementById('biasIndicators');
+      biEl.innerHTML = '';
+      (r.bias_indicators || []).forEach(b => {
+        biEl.innerHTML += `<span class="tag orange">${b}</span>`;
+      });
+      if (!r.bias_indicators?.length) biEl.innerHTML = `<span class="tag">None detected</span>`;
+
+      // Fact check
+      const ftEl = document.getElementById('factTable');
+      ftEl.innerHTML = '';
+      (r.fact_check_points || []).forEach(pt => {
+        const badgeClass = pt.assessment?.replace(' ', '') === 'PARTIALLYTRUE' ? 'PARTIALLY' : pt.assessment;
+        ftEl.innerHTML += `
+          <tr>
+            <td class="fact-claim">${pt.claim}</td>
+            <td><span class="fact-badge ${badgeClass}">${pt.assessment}</span></td>
+            <td class="fact-explain">${pt.explanation}</td>
+          </tr>`;
+      });
+      if (!r.fact_check_points?.length) ftEl.innerHTML = `<tr><td colspan="3" style="color:var(--muted);font-size:12px">No specific claims extracted</td></tr>`;
+
+      // Recommendation
+      document.getElementById('recommendation').textContent = r.recommendation || '';
+
+      // Show
+      document.getElementById('results').classList.add('active');
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = '⚠ ' + msg;
+      el.classList.add('active');
+    }
+
+    function resetForm() {
+      document.getElementById('results').classList.remove('active');
+      document.getElementById('errorMsg').classList.remove('active');
+      textarea.value = '';
+      charCount.textContent = '0';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Enter key shortcut
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') analyzeNews();
+    });
+  </script>
+</body>
+</html>
