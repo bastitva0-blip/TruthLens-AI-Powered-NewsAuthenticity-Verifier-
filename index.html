@@ -1,809 +1,1253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TruthLens — AI News Verifier</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <style>
-    :root {
-      --bg: #0a0a0f;
-      --surface: #111118;
-      --surface2: #18181f;
-      --border: rgba(255,255,255,0.07);
-      --accent: #e8c547;
-      --accent2: #ff6b4a;
-      --text: #e8e8f0;
-      --muted: #6b6b80;
-      --real: #4ade80;
-      --fake: #f87171;
-      --misleading: #fb923c;
-      --unverifiable: #94a3b8;
-      --glow: rgba(232, 197, 71, 0.15);
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    /* Background grid */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(232,197,71,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(232,197,71,0.03) 1px, transparent 1px);
-      background-size: 60px 60px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .noise {
-      position: fixed;
-      inset: 0;
-      opacity: 0.03;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .container {
-      position: relative;
-      z-index: 2;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-    }
-
-    /* Header */
-    header {
-      padding: 48px 0 40px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 48px;
-    }
-
-    .logo-mark {
-      width: 44px;
-      height: 44px;
-      background: var(--accent);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Playfair Display', serif;
-      font-weight: 900;
-      font-size: 22px;
-      color: #0a0a0f;
-      flex-shrink: 0;
-    }
-
-    .logo-text {
-      font-family: 'Playfair Display', serif;
-      font-size: 28px;
-      font-weight: 900;
-      letter-spacing: -0.5px;
-      color: var(--text);
-    }
-
-    .logo-text span {
-      color: var(--accent);
-    }
-
-    .tagline {
-      margin-left: auto;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      text-align: right;
-      letter-spacing: 0.05em;
-      line-height: 1.6;
-    }
-
-    /* Hero */
-    .hero {
-      margin-bottom: 40px;
-    }
-
-    .hero h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(36px, 6vw, 64px);
-      font-weight: 900;
-      line-height: 1.05;
-      letter-spacing: -1.5px;
-      margin-bottom: 16px;
-    }
-
-    .hero h1 em {
-      font-style: italic;
-      color: var(--accent);
-    }
-
-    .hero p {
-      color: var(--muted);
-      font-size: 15px;
-      max-width: 520px;
-      line-height: 1.7;
-    }
-
-    /* Input area */
-    .input-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 28px;
-      margin-bottom: 32px;
-      position: relative;
-    }
-
-    .input-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, var(--accent), transparent);
-    }
-
-    .input-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--accent);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .input-label::before {
-      content: '//';
-      opacity: 0.5;
-    }
-
-    textarea {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      line-height: 1.7;
-      padding: 16px;
-      resize: vertical;
-      min-height: 180px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    textarea::placeholder {
-      color: var(--muted);
-      font-style: italic;
-    }
-
-    textarea:focus {
-      border-color: rgba(232,197,71,0.4);
-    }
-
-    .input-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 16px;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .char-count {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .btn-analyze {
-      background: var(--accent);
-      color: #0a0a0f;
-      border: none;
-      padding: 12px 28px;
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .btn-analyze:hover:not(:disabled) {
-      background: #f5d04a;
-      transform: translateY(-1px);
-      box-shadow: 0 8px 24px var(--glow);
-    }
-
-    .btn-analyze:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* Loading */
-    .loading {
-      display: none;
-      text-align: center;
-      padding: 60px 0;
-    }
-
-    .loading.active { display: block; }
-
-    .scan-animation {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 24px;
-      position: relative;
-    }
-
-    .scan-ring {
-      position: absolute;
-      inset: 0;
-      border: 2px solid transparent;
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    .scan-ring:nth-child(2) {
-      inset: 10px;
-      border-top-color: var(--accent2);
-      animation-duration: 0.7s;
-      animation-direction: reverse;
-    }
-
-    .scan-dot {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%,-50%);
-      width: 8px; height: 8px;
-      background: var(--accent);
-      border-radius: 50%;
-      animation: pulse 1s ease-in-out infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse { 0%,100%{opacity:1;transform:translate(-50%,-50%) scale(1)} 50%{opacity:0.3;transform:translate(-50%,-50%) scale(0.6)} }
-
-    .loading-text {
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      color: var(--muted);
-      animation: blink 1.5s ease-in-out infinite;
-    }
-
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-    /* Results */
-    #results { display: none; }
-    #results.active { display: block; animation: fadeUp 0.5s ease; }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Verdict Banner */
-    .verdict-banner {
-      padding: 32px 28px;
-      margin-bottom: 24px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .verdict-banner.REAL {
-      background: rgba(74, 222, 128, 0.08);
-      border: 1px solid rgba(74, 222, 128, 0.3);
-    }
-    .verdict-banner.FAKE {
-      background: rgba(248, 113, 113, 0.08);
-      border: 1px solid rgba(248, 113, 113, 0.3);
-    }
-    .verdict-banner.MISLEADING {
-      background: rgba(251, 146, 60, 0.08);
-      border: 1px solid rgba(251, 146, 60, 0.3);
-    }
-    .verdict-banner.UNVERIFIABLE {
-      background: rgba(148, 163, 184, 0.08);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-    }
-
-    .verdict-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .verdict-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-
-    .verdict-text {
-      font-family: 'Playfair Display', serif;
-      font-size: 48px;
-      font-weight: 900;
-      line-height: 1;
-      letter-spacing: -1px;
-    }
-
-    .REAL .verdict-text { color: var(--real); }
-    .FAKE .verdict-text { color: var(--fake); }
-    .MISLEADING .verdict-text { color: var(--misleading); }
-    .UNVERIFIABLE .verdict-text { color: var(--unverifiable); }
-
-    .confidence-wrap {
-      text-align: right;
-    }
-
-    .confidence-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 6px;
-    }
-
-    .confidence-num {
-      font-family: 'Playfair Display', serif;
-      font-size: 48px;
-      font-weight: 900;
-      color: var(--accent);
-      line-height: 1;
-    }
-
-    .confidence-bar-wrap {
-      margin-top: 12px;
-      height: 4px;
-      background: rgba(255,255,255,0.08);
-      overflow: hidden;
-    }
-
-    .confidence-bar {
-      height: 100%;
-      background: var(--accent);
-      transition: width 1s ease;
-    }
-
-    .verdict-summary {
-      font-size: 14px;
-      color: var(--muted);
-      line-height: 1.7;
-      font-style: italic;
-      border-top: 1px solid var(--border);
-      padding-top: 16px;
-    }
-
-    /* Analysis grid */
-    .analysis-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    @media (max-width: 640px) {
-      .analysis-grid { grid-template-columns: 1fr; }
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 20px;
-    }
-
-    .card-title {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      color: var(--accent);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .card-title .icon {
-      font-size: 14px;
-    }
-
-    .card-full {
-      grid-column: 1 / -1;
-    }
-
-    /* List items */
-    .tag-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .tag {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      padding: 4px 10px;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      background: var(--surface2);
-    }
-
-    .tag.red { border-color: rgba(248,113,113,0.4); color: var(--fake); background: rgba(248,113,113,0.06); }
-    .tag.green { border-color: rgba(74,222,128,0.4); color: var(--real); background: rgba(74,222,128,0.06); }
-    .tag.orange { border-color: rgba(251,146,60,0.4); color: var(--misleading); background: rgba(251,146,60,0.06); }
-
-    /* Analysis text */
-    .analysis-text {
-      font-size: 13px;
-      line-height: 1.75;
-      color: #c0c0d0;
-    }
-
-    /* Fact-check table */
-    .fact-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .fact-table td {
-      padding: 10px 12px;
-      font-size: 12px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-
-    .fact-table tr:last-child td { border-bottom: none; }
-
-    .fact-claim {
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      width: 40%;
-    }
-
-    .fact-badge {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      padding: 3px 8px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .fact-badge.TRUE { background: rgba(74,222,128,0.15); color: var(--real); }
-    .fact-badge.FALSE { background: rgba(248,113,113,0.15); color: var(--fake); }
-    .fact-badge.PARTIALLY { background: rgba(251,146,60,0.15); color: var(--misleading); }
-    .fact-badge.UNVERIFIABLE { background: rgba(148,163,184,0.15); color: var(--unverifiable); }
-
-    .fact-explain {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.6;
-    }
-
-    /* Recommendation */
-    .recommendation {
-      background: var(--surface2);
-      border-left: 3px solid var(--accent);
-      padding: 16px 20px;
-      font-size: 13px;
-      line-height: 1.7;
-      color: var(--text);
-    }
-
-    /* Error */
-    .error-msg {
-      display: none;
-      background: rgba(248,113,113,0.08);
-      border: 1px solid rgba(248,113,113,0.3);
-      padding: 16px 20px;
-      color: var(--fake);
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      margin-bottom: 20px;
-    }
-
-    .error-msg.active { display: block; }
-
-    /* Reset btn */
-    .btn-reset {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 10px 20px;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-bottom: 32px;
-    }
-
-    .btn-reset:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    /* Footer */
-    footer {
-      border-top: 1px solid var(--border);
-      padding-top: 24px;
-      margin-top: 48px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    footer p {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    footer p span { color: var(--accent); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruthLens — AI News Fact-Checker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c22;
+    --border: #1e2430;
+    --border2: #252d3a;
+    --text: #e8edf5;
+    --text2: #8b96a8;
+    --text3: #4a5568;
+    --accent: #3b82f6;
+    --accent2: #1d4ed8;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --orange: #f97316;
+    --purple: #8b5cf6;
+    --cyan: #06b6d4;
+    --real: #10b981;
+    --fake: #ef4444;
+    --misleading: #f59e0b;
+    --unverifiable: #8b5cf6;
+    --satire: #06b6d4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    background: rgba(10,12,16,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  /* Main layout */
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem;
+  }
+
+  .hero {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 700;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.75rem;
+  }
+
+  .hero p {
+    color: var(--text2);
+    font-size: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  /* Tab bar */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    flex: 1;
+    min-width: 120px;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text2);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .card-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Textarea & Input */
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.9rem;
+    padding: 12px 14px;
+    resize: vertical;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  textarea:focus, input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  textarea { min-height: 120px; }
+
+  .input-label {
+    font-size: 0.8rem;
+    color: var(--text2);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .input-group { margin-bottom: 1rem; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  @media (max-width: 600px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  /* Button */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-radius: 10px;
+    border: none;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Verdict Badge */
+  .verdict-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .verdict-REAL { background: rgba(16,185,129,0.15); color: var(--real); border: 1px solid rgba(16,185,129,0.3); }
+  .verdict-FAKE { background: rgba(239,68,68,0.15); color: var(--fake); border: 1px solid rgba(239,68,68,0.3); }
+  .verdict-MISLEADING { background: rgba(245,158,11,0.15); color: var(--misleading); border: 1px solid rgba(245,158,11,0.3); }
+  .verdict-UNVERIFIABLE { background: rgba(139,92,246,0.15); color: var(--unverifiable); border: 1px solid rgba(139,92,246,0.3); }
+  .verdict-SATIRE { background: rgba(6,182,212,0.15); color: var(--satire); border: 1px solid rgba(6,182,212,0.3); }
+
+  /* Confidence bar */
+  .confidence-bar {
+    background: var(--border);
+    border-radius: 6px;
+    height: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .confidence-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 1s ease;
+  }
+
+  /* Result sections */
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .result-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .result-card h3 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    background: var(--border);
+    color: var(--text2);
+    border: 1px solid var(--border2);
+  }
+
+  .tag.red { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.2); }
+  .tag.green { background: rgba(16,185,129,0.1); color: #6ee7b7; border-color: rgba(16,185,129,0.2); }
+  .tag.yellow { background: rgba(245,158,11,0.1); color: #fcd34d; border-color: rgba(245,158,11,0.2); }
+  .tag.blue { background: rgba(59,130,246,0.1); color: #93c5fd; border-color: rgba(59,130,246,0.2); }
+  .tag.purple { background: rgba(139,92,246,0.1); color: #c4b5fd; border-color: rgba(139,92,246,0.2); }
+
+  /* Fact check table */
+  .fact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .fact-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--text2);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .fact-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .fact-table tr:last-child td { border-bottom: none; }
+
+  .assessment-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .assessment-TRUE { background: rgba(16,185,129,0.15); color: var(--green); }
+  .assessment-FALSE { background: rgba(239,68,68,0.15); color: var(--red); }
+  .assessment-PARTIALLY\ TRUE { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .assessment-UNVERIFIABLE { background: rgba(139,92,246,0.15); color: var(--purple); }
+
+  /* Score meter */
+  .score-meter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .score-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 48px;
+  }
+
+  .score-bar-wrap {
+    flex: 1;
+    background: var(--border);
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+  }
+
+  .score-bar {
+    height: 100%;
+    border-radius: 6px;
+  }
+
+  /* Severity */
+  .severity-LOW { color: var(--green); }
+  .severity-MEDIUM { color: var(--yellow); }
+  .severity-HIGH { color: var(--orange); }
+  .severity-CRITICAL { color: var(--red); }
+
+  /* Spinner */
+  .spinner {
+    display: none;
+    text-align: center;
+    padding: 3rem;
+  }
+  .spinner.show { display: block; }
+
+  .spin-ring {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 10px;
+    padding: 1rem;
+    color: #fca5a5;
+    font-size: 0.85rem;
+    display: none;
+  }
+  .error-box.show { display: block; }
+
+  /* Bias meter */
+  .bias-track {
+    position: relative;
+    height: 28px;
+    background: linear-gradient(to right, #3b82f6, #6b7280, #ef4444);
+    border-radius: 14px;
+    margin: 1rem 0 0.5rem;
+  }
+
+  .bias-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text2);
+    font-weight: 600;
+  }
+
+  .bias-needle {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px; height: 20px;
+    background: white;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+    transition: left 1s ease;
+  }
+
+  /* Share/Social */
+  .share-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .share-SHARE { background: rgba(16,185,129,0.15); color: var(--green); }
+  .share-DO_NOT_SHARE { background: rgba(239,68,68,0.15); color: var(--red); }
+  .share-SHARE_WITH_CAUTION { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+  /* Prose */
+  .prose {
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  .prose p { margin-bottom: 0.75rem; }
+
+  /* Stat row */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .stat-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .stat-box .val {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-box .lbl {
+    font-size: 0.7rem;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Analysis full width section */
+  .analysis-section {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .analysis-section h3 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Comparison result */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 600px) {
+    .compare-grid { grid-template-columns: 1fr; }
+    .stat-row { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* AI probability */
+  .ai-prob-high { color: var(--red); }
+  .ai-prob-med { color: var(--yellow); }
+  .ai-prob-low { color: var(--green); }
+
+  /* Virality */
+  .virality-HIGH { color: var(--red); }
+  .virality-MEDIUM { color: var(--yellow); }
+  .virality-LOW { color: var(--green); }
+
+  /* Hidden */
+  .hidden { display: none; }
+
+  /* Headline score */
+  .headline-scores {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Improved headline */
+  .improved-headline {
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-style: italic;
+    color: #93c5fd;
+  }
+
+  /* Scrollable results */
+  #results-container, #compare-results, #headline-results, #ai-results, #social-results {
+    animation: fadeUp 0.4s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Counter narrative */
+  .counter-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+  }
+
+  .counter-item::before {
+    content: "↻";
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+</style>
 </head>
 <body>
-  <div class="noise"></div>
 
-  <div class="container">
-    <header>
-      <div class="logo-mark">T</div>
-      <div class="logo-text">Truth<span>Lens</span></div>
-      <div class="tagline">AI-Powered News<br>Authenticity Verifier</div>
-    </header>
+<header>
+  <div class="logo">
+    <div class="logo-icon">🔍</div>
+    TruthLens
+    <span class="badge">AI</span>
+  </div>
+  <span style="font-size:0.75rem;color:var(--text2)">Powered by Gemini 2.5 Flash</span>
+</header>
 
-    <div class="hero">
-      <h1>Is this news<br><em>real or fake?</em></h1>
-      <p>Paste any news article, headline, or claim. Our AI powered by Google Gemini will analyze it for authenticity, bias, and credibility in seconds.</p>
-    </div>
-
-    <!-- Input -->
-    <div class="input-card">
-      <div class="input-label">Paste news or claim to analyze</div>
-      <textarea id="newsInput" placeholder="Paste a news article, headline, social media post, or any claim you want to verify...&#10;&#10;Example: 'Scientists discover that drinking coffee daily reduces the risk of cancer by 50% according to a new study from Harvard University.'"></textarea>
-      <div class="input-footer">
-        <div class="char-count"><span id="charCount">0</span> characters</div>
-        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeNews()">
-          <span>⟳</span> Analyze Now
-        </button>
-      </div>
-    </div>
-
-    <!-- Error -->
-    <div class="error-msg" id="errorMsg"></div>
-
-    <!-- Loading -->
-    <div class="loading" id="loading">
-      <div class="scan-animation">
-        <div class="scan-ring"></div>
-        <div class="scan-ring"></div>
-        <div class="scan-dot"></div>
-      </div>
-      <div class="loading-text">Analyzing with Gemini AI...</div>
-    </div>
-
-    <!-- Results -->
-    <div id="results">
-      <button class="btn-reset" onclick="resetForm()">← Analyze Another</button>
-
-      <!-- Verdict Banner -->
-      <div class="verdict-banner" id="verdictBanner">
-        <div class="verdict-top">
-          <div>
-            <div class="verdict-label">Verdict</div>
-            <div class="verdict-text" id="verdictText">—</div>
-          </div>
-          <div class="confidence-wrap">
-            <div class="confidence-label">AI Confidence</div>
-            <div class="confidence-num" id="confidenceNum">—</div>
-          </div>
-        </div>
-        <div class="confidence-bar-wrap">
-          <div class="confidence-bar" id="confidenceBar" style="width:0%"></div>
-        </div>
-        <div class="verdict-summary" id="summaryText"></div>
-      </div>
-
-      <!-- Grid -->
-      <div class="analysis-grid">
-
-        <!-- Detailed Analysis -->
-        <div class="card card-full">
-          <div class="card-title"><span class="icon">🔍</span>Detailed Analysis</div>
-          <div class="analysis-text" id="analysisText"></div>
-        </div>
-
-        <!-- Red Flags -->
-        <div class="card">
-          <div class="card-title"><span class="icon">🚩</span>Red Flags</div>
-          <div class="tag-list" id="redFlags"></div>
-        </div>
-
-        <!-- Credibility Factors -->
-        <div class="card">
-          <div class="card-title"><span class="icon">✓</span>Credibility Factors</div>
-          <div class="tag-list" id="credibilityFactors"></div>
-        </div>
-
-        <!-- Bias Indicators -->
-        <div class="card">
-          <div class="card-title"><span class="icon">⚖</span>Bias Indicators</div>
-          <div class="tag-list" id="biasIndicators"></div>
-        </div>
-
-        <!-- Fact Check Points -->
-        <div class="card">
-          <div class="card-title"><span class="icon">📋</span>Claim-by-Claim Check</div>
-          <table class="fact-table" id="factTable"></table>
-        </div>
-
-        <!-- Recommendation -->
-        <div class="card card-full">
-          <div class="card-title"><span class="icon">💡</span>Recommendation</div>
-          <div class="recommendation" id="recommendation"></div>
-        </div>
-
-      </div>
-    </div>
-
-    <footer>
-      <p>Powered by <span>Google Gemini 1.5 Flash</span></p>
-      <p>TruthLens — Not a substitute for professional fact-checking</p>
-    </footer>
+<main>
+  <div class="hero">
+    <h1>AI-Powered Fact Checker</h1>
+    <p>Analyze news, detect bias, compare stories, and spot misinformation with advanced AI.</p>
   </div>
 
-  <script>
-    const textarea = document.getElementById('newsInput');
-    const charCount = document.getElementById('charCount');
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('analyze')">📰 Fact Check</button>
+    <button class="tab" onclick="switchTab('headline')">📣 Headline Analyzer</button>
+    <button class="tab" onclick="switchTab('compare')">⚖️ Compare Stories</button>
+    <button class="tab" onclick="switchTab('social')">📱 Social Media</button>
+    <button class="tab" onclick="switchTab('aidetect')">🤖 AI Text Detector</button>
+  </div>
 
-    textarea.addEventListener('input', () => {
-      charCount.textContent = textarea.value.length;
+  <!-- FACT CHECK PANEL -->
+  <div id="panel-analyze" class="panel active">
+    <div class="card">
+      <div class="card-title">📰 News Article or Claim</div>
+      <div class="input-group">
+        <textarea id="news-input" placeholder="Paste a news article, headline, or claim to fact-check…" rows="6"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runAnalyze()">
+        <span>🔍</span> Analyze for Truth
+      </button>
+    </div>
+
+    <div class="error-box" id="analyze-error"></div>
+    <div class="spinner" id="analyze-spinner">
+      <div class="spin-ring"></div>
+      <p style="color:var(--text2);font-size:0.85rem">Analyzing with AI…</p>
+    </div>
+    <div id="results-container" class="hidden"></div>
+  </div>
+
+  <!-- HEADLINE PANEL -->
+  <div id="panel-headline" class="panel">
+    <div class="card">
+      <div class="card-title">📣 Clickbait & Headline Analyzer</div>
+      <div class="input-group">
+        <div class="input-label">Headline *</div>
+        <input type="text" id="headline-input" placeholder="Paste the headline here…">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Article Body (optional)</div>
+        <textarea id="body-input" placeholder="Paste the article body to check if headline matches content…" rows="4"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runHeadline()">
+        <span>📣</span> Analyze Headline
+      </button>
+    </div>
+
+    <div class="error-box" id="headline-error"></div>
+    <div class="spinner" id="headline-spinner">
+      <div class="spin-ring"></div>
+      <p style="color:var(--text2);font-size:0.85rem">Analyzing headline…</p>
+    </div>
+    <div id="headline-results" class="hidden"></div>
+  </div>
+
+  <!-- COMPARE PANEL -->
+  <div id="panel-compare" class="panel">
+    <div class="card">
+      <div class="card-title">⚖️ Compare Two News Stories</div>
+      <div class="grid-2">
+        <div class="input-group">
+          <div class="input-label">Story 1</div>
+          <textarea id="story1-input" placeholder="Paste first news story…" rows="6"></textarea>
+        </div>
+        <div class="input-group">
+          <div class="input-label">Story 2</div>
+          <textarea id="story2-input" placeholder="Paste second news story…" rows="6"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="runCompare()">
+        <span>⚖️</span> Compare Stories
+      </button>
+    </div>
+
+    <div class="error-box" id="compare-error"></div>
+    <div class="spinner" id="compare-spinner">
+      <div class="spin-ring"></div>
+      <p style="color:var(--text2);font-size:0.85rem">Comparing stories…</p>
+    </div>
+    <div id="compare-results" class="hidden"></div>
+  </div>
+
+  <!-- SOCIAL MEDIA PANEL -->
+  <div id="panel-social" class="panel">
+    <div class="card">
+      <div class="card-title">📱 Social Media Post / Chain Message Analyzer</div>
+      <div class="input-group">
+        <textarea id="social-input" placeholder="Paste a viral post, chain message, or social media claim…" rows="6"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runSocial()">
+        <span>📱</span> Analyze Post
+      </button>
+    </div>
+
+    <div class="error-box" id="social-error"></div>
+    <div class="spinner" id="social-spinner">
+      <div class="spin-ring"></div>
+      <p style="color:var(--text2);font-size:0.85rem">Analyzing post…</p>
+    </div>
+    <div id="social-results" class="hidden"></div>
+  </div>
+
+  <!-- AI TEXT DETECTOR PANEL -->
+  <div id="panel-aidetect" class="panel">
+    <div class="card">
+      <div class="card-title">🤖 AI-Generated Text Detector</div>
+      <div class="input-group">
+        <textarea id="ai-input" placeholder="Paste text to check if it was AI-generated or written by a human…" rows="7"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runAIDetect()">
+        <span>🤖</span> Detect AI Text
+      </button>
+    </div>
+
+    <div class="error-box" id="ai-error"></div>
+    <div class="spinner" id="ai-spinner">
+      <div class="spin-ring"></div>
+      <p style="color:var(--text2);font-size:0.85rem">Analyzing text…</p>
+    </div>
+    <div id="ai-results" class="hidden"></div>
+  </div>
+</main>
+
+<script>
+// Tab switching
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('show');
+}
+
+function clearError(id) {
+  const el = document.getElementById(id);
+  el.textContent = '';
+  el.classList.remove('show');
+}
+
+function showSpinner(id) { document.getElementById(id).classList.add('show'); }
+function hideSpinner(id) { document.getElementById(id).classList.remove('show'); }
+function showResult(id, html) {
+  const el = document.getElementById(id);
+  el.classList.remove('hidden');
+  el.innerHTML = html;
+}
+
+function tagsHtml(items, cls = '') {
+  if (!items || !items.length) return '<span style="color:var(--text3);font-size:0.8rem">None identified</span>';
+  return '<div class="tag-list">' + items.map(i => `<span class="tag ${cls}">${i}</span>`).join('') + '</div>';
+}
+
+function confidenceColor(v) {
+  if (v >= 75) return '#10b981';
+  if (v >= 50) return '#f59e0b';
+  return '#ef4444';
+}
+
+// ---- FACT CHECK ----
+async function runAnalyze() {
+  const text = document.getElementById('news-input').value.trim();
+  if (!text) return showError('analyze-error', 'Please enter a news article or claim.');
+  if (text.length < 20) return showError('analyze-error', 'Please provide more detailed content.');
+  clearError('analyze-error');
+  document.getElementById('results-container').classList.add('hidden');
+  showSpinner('analyze-spinner');
+
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ news: text })
     });
+    const data = await res.json();
+    hideSpinner('analyze-spinner');
 
-    async function analyzeNews() {
-      const newsText = textarea.value.trim();
-      if (!newsText || newsText.length < 20) {
-        showError('Please enter at least 20 characters of news content to analyze.');
-        return;
-      }
+    if (!data.success) return showError('analyze-error', data.error);
+    const r = data.result;
 
-      // UI State
-      document.getElementById('errorMsg').classList.remove('active');
-      document.getElementById('results').classList.remove('active');
-      document.getElementById('loading').classList.add('active');
-      document.getElementById('analyzeBtn').disabled = true;
+    const verdictEmoji = { REAL:'✅', FAKE:'❌', MISLEADING:'⚠️', UNVERIFIABLE:'❓', SATIRE:'😂' };
+    const severityEmoji = { LOW:'🟢', MEDIUM:'🟡', HIGH:'🟠', CRITICAL:'🔴' };
 
-      try {
-        const response = await fetch('/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ news: newsText })
-        });
+    showResult('results-container', `
+      <div class="card" style="border-color:${getBorderColor(r.verdict)}">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:1.25rem">
+          <span class="verdict-badge verdict-${r.verdict}">${verdictEmoji[r.verdict]||'🔍'} ${r.verdict}</span>
+          <span class="severity-${r.severity}" style="font-size:0.85rem;font-weight:600">${severityEmoji[r.severity]||''} ${r.severity} SEVERITY</span>
+        </div>
 
-        const data = await response.json();
-        document.getElementById('loading').classList.remove('active');
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="val" style="color:${confidenceColor(r.confidence)}">${r.confidence}%</div>
+            <div class="lbl">Confidence</div>
+          </div>
+          <div class="stat-box">
+            <div class="val" style="color:${r.emotional_manipulation_score>6?'var(--red)':r.emotional_manipulation_score>3?'var(--yellow)':'var(--green)'}">${r.emotional_manipulation_score}/10</div>
+            <div class="lbl">Manipulation</div>
+          </div>
+          <div class="stat-box">
+            <div class="val virality-${r.virality_risk}">${r.virality_risk}</div>
+            <div class="lbl">Virality Risk</div>
+          </div>
+        </div>
 
-        if (!response.ok || !data.success) {
-          showError(data.error || 'Analysis failed. Please try again.');
-          return;
-        }
+        <div class="analysis-section">
+          <h3>📋 Summary</h3>
+          <p class="prose">${r.summary}</p>
+        </div>
 
-        renderResults(data.result);
-      } catch (err) {
-        document.getElementById('loading').classList.remove('active');
-        showError('Network error. Make sure the server is running.');
-      } finally {
-        document.getElementById('analyzeBtn').disabled = false;
-      }
-    }
+        <div class="analysis-section">
+          <h3>🔬 Detailed Analysis</h3>
+          <p class="prose">${r.analysis}</p>
+        </div>
 
-    function renderResults(r) {
-      const verdict = r.verdict || 'UNVERIFIABLE';
-      const confidence = r.confidence || 0;
+        ${r.missing_context ? `
+        <div class="analysis-section">
+          <h3>⚠️ Missing Context</h3>
+          <p class="prose">${r.missing_context}</p>
+        </div>` : ''}
 
-      // Banner
-      const banner = document.getElementById('verdictBanner');
-      banner.className = `verdict-banner ${verdict}`;
-      document.getElementById('verdictText').textContent = verdict;
-      document.getElementById('confidenceNum').textContent = `${confidence}%`;
-      document.getElementById('summaryText').textContent = r.summary || '';
+        ${r.statistical_analysis ? `
+        <div class="analysis-section">
+          <h3>📊 Statistical Analysis</h3>
+          <p class="prose">${r.statistical_analysis}</p>
+        </div>` : ''}
 
-      setTimeout(() => {
-        document.getElementById('confidenceBar').style.width = `${confidence}%`;
-      }, 200);
+        ${r.quote_verification ? `
+        <div class="analysis-section">
+          <h3>💬 Quote Verification</h3>
+          <p class="prose">${r.quote_verification}</p>
+        </div>` : ''}
 
-      // Analysis
-      document.getElementById('analysisText').textContent = r.analysis || '';
+        ${r.fact_check_points && r.fact_check_points.length ? `
+        <div class="analysis-section">
+          <h3>✔️ Fact Check Points</h3>
+          <table class="fact-table">
+            <tr><th>Claim</th><th>Assessment</th><th>Explanation</th></tr>
+            ${r.fact_check_points.map(f => `
+              <tr>
+                <td style="font-size:0.82rem;max-width:200px">${f.claim}</td>
+                <td><span class="assessment-badge assessment-${f.assessment}">${f.assessment}</span></td>
+                <td style="font-size:0.82rem;color:var(--text2)">${f.explanation}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>` : ''}
 
-      // Red Flags
-      const rfEl = document.getElementById('redFlags');
-      rfEl.innerHTML = '';
-      (r.red_flags || []).forEach(flag => {
-        rfEl.innerHTML += `<span class="tag red">${flag}</span>`;
-      });
-      if (!r.red_flags?.length) rfEl.innerHTML = `<span class="tag">None detected</span>`;
+        <div class="result-grid">
+          <div class="result-card">
+            <h3>🚩 Red Flags</h3>
+            ${tagsHtml(r.red_flags, 'red')}
+          </div>
+          <div class="result-card">
+            <h3>✅ Credibility Factors</h3>
+            ${tagsHtml(r.credibility_factors, 'green')}
+          </div>
+          <div class="result-card">
+            <h3>⚖️ Bias Indicators</h3>
+            ${tagsHtml(r.bias_indicators, 'yellow')}
+          </div>
+          <div class="result-card">
+            <h3>🎭 Emotional Tactics</h3>
+            ${tagsHtml(r.emotional_tactics, 'purple')}
+          </div>
+          <div class="result-card">
+            <h3>🧠 Logical Fallacies</h3>
+            ${tagsHtml(r.logical_fallacies, 'red')}
+          </div>
+          <div class="result-card">
+            <h3>🔗 Suggested Sources</h3>
+            ${tagsHtml(r.suggested_sources, 'blue')}
+          </div>
+        </div>
 
-      // Credibility
-      const cfEl = document.getElementById('credibilityFactors');
-      cfEl.innerHTML = '';
-      (r.credibility_factors || []).forEach(f => {
-        cfEl.innerHTML += `<span class="tag green">${f}</span>`;
-      });
-      if (!r.credibility_factors?.length) cfEl.innerHTML = `<span class="tag">None detected</span>`;
+        ${r.alternative_perspectives && r.alternative_perspectives.length ? `
+        <div class="analysis-section">
+          <h3>🌐 Alternative Perspectives</h3>
+          ${r.alternative_perspectives.map(p => `<div class="counter-item">${p}</div>`).join('')}
+        </div>` : ''}
 
-      // Bias
-      const biEl = document.getElementById('biasIndicators');
-      biEl.innerHTML = '';
-      (r.bias_indicators || []).forEach(b => {
-        biEl.innerHTML += `<span class="tag orange">${b}</span>`;
-      });
-      if (!r.bias_indicators?.length) biEl.innerHTML = `<span class="tag">None detected</span>`;
+        ${r.counter_narratives && r.counter_narratives.length ? `
+        <div class="analysis-section">
+          <h3>↻ Counter Narratives</h3>
+          ${r.counter_narratives.map(c => `<div class="counter-item">${c}</div>`).join('')}
+        </div>` : ''}
 
-      // Fact check
-      const ftEl = document.getElementById('factTable');
-      ftEl.innerHTML = '';
-      (r.fact_check_points || []).forEach(pt => {
-        const badgeClass = pt.assessment?.replace(' ', '') === 'PARTIALLYTRUE' ? 'PARTIALLY' : pt.assessment;
-        ftEl.innerHTML += `
-          <tr>
-            <td class="fact-claim">${pt.claim}</td>
-            <td><span class="fact-badge ${badgeClass}">${pt.assessment}</span></td>
-            <td class="fact-explain">${pt.explanation}</td>
-          </tr>`;
-      });
-      if (!r.fact_check_points?.length) ftEl.innerHTML = `<tr><td colspan="3" style="color:var(--muted);font-size:12px">No specific claims extracted</td></tr>`;
+        ${r.target_audience || r.potential_motive ? `
+        <div class="result-grid">
+          ${r.target_audience ? `<div class="result-card"><h3>🎯 Target Audience</h3><p style="font-size:0.85rem">${r.target_audience}</p></div>` : ''}
+          ${r.potential_motive ? `<div class="result-card"><h3>🕵️ Potential Motive</h3><p style="font-size:0.85rem">${r.potential_motive}</p></div>` : ''}
+        </div>` : ''}
 
-      // Recommendation
-      document.getElementById('recommendation').textContent = r.recommendation || '';
+        <div class="analysis-section" style="border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.05)">
+          <h3>💡 Recommendation</h3>
+          <p class="prose">${r.recommendation}</p>
+        </div>
+      </div>
+    `);
+  } catch(e) {
+    hideSpinner('analyze-spinner');
+    showError('analyze-error', 'Network error: ' + e.message);
+  }
+}
 
-      // Show
-      document.getElementById('results').classList.add('active');
-      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+function getBorderColor(verdict) {
+  const map = { REAL:'rgba(16,185,129,0.3)', FAKE:'rgba(239,68,68,0.3)', MISLEADING:'rgba(245,158,11,0.3)', UNVERIFIABLE:'rgba(139,92,246,0.3)', SATIRE:'rgba(6,182,212,0.3)' };
+  return map[verdict] || 'var(--border)';
+}
 
-    function showError(msg) {
-      const el = document.getElementById('errorMsg');
-      el.textContent = '⚠ ' + msg;
-      el.classList.add('active');
-    }
+// ---- HEADLINE ----
+async function runHeadline() {
+  const headline = document.getElementById('headline-input').value.trim();
+  const body = document.getElementById('body-input').value.trim();
+  if (!headline) return showError('headline-error', 'Please enter a headline.');
+  clearError('headline-error');
+  document.getElementById('headline-results').classList.add('hidden');
+  showSpinner('headline-spinner');
 
-    function resetForm() {
-      document.getElementById('results').classList.remove('active');
-      document.getElementById('errorMsg').classList.remove('active');
-      textarea.value = '';
-      charCount.textContent = '0';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    // Enter key shortcut
-    document.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.key === 'Enter') analyzeNews();
+  try {
+    const res = await fetch('/headline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headline, body })
     });
-  </script>
+    const data = await res.json();
+    hideSpinner('headline-spinner');
+    if (!data.success) return showError('headline-error', data.error);
+    const r = data.result;
+
+    const vMap = { ACCURATE:'var(--green)', MISLEADING:'var(--yellow)', CLICKBAIT:'var(--orange)', OUTRIGHT_FALSE:'var(--red)' };
+
+    showResult('headline-results', `
+      <div class="card">
+        <div style="margin-bottom:1rem">
+          <span class="verdict-badge" style="background:${vMap[r.verdict]}20;color:${vMap[r.verdict]};border:1px solid ${vMap[r.verdict]}40">
+            ${r.verdict}
+          </span>
+        </div>
+
+        <div class="headline-scores">
+          <div class="result-card">
+            <h3>📣 Clickbait Score</h3>
+            <div class="score-meter">
+              <span class="score-value" style="color:${r.clickbait_score>6?'var(--red)':r.clickbait_score>3?'var(--yellow)':'var(--green)'}">${r.clickbait_score}</span>
+              <div class="score-bar-wrap">
+                <div class="score-bar" style="width:${r.clickbait_score*10}%;background:${r.clickbait_score>6?'var(--red)':r.clickbait_score>3?'var(--yellow)':'var(--green)'}"></div>
+              </div>
+              <span style="color:var(--text2);font-size:0.8rem">/10</span>
+            </div>
+          </div>
+          <div class="result-card">
+            <h3>😱 Sensationalism Score</h3>
+            <div class="score-meter">
+              <span class="score-value" style="color:${r.sensationalism_score>6?'var(--red)':r.sensationalism_score>3?'var(--yellow)':'var(--green)'}">${r.sensationalism_score}</span>
+              <div class="score-bar-wrap">
+                <div class="score-bar" style="width:${r.sensationalism_score*10}%;background:${r.sensationalism_score>6?'var(--red)':r.sensationalism_score>3?'var(--yellow)':'var(--green)'}"></div>
+              </div>
+              <span style="color:var(--text2);font-size:0.8rem">/10</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-box" style="margin-bottom:1rem;text-align:left;display:flex;align-items:center;gap:12px">
+          <div>
+            <div class="val" style="color:${r.headline_accuracy>70?'var(--green)':r.headline_accuracy>40?'var(--yellow)':'var(--red)'}">${r.headline_accuracy}%</div>
+            <div class="lbl">Headline Accuracy</div>
+          </div>
+          <div class="confidence-bar" style="flex:1;height:10px">
+            <div class="confidence-fill" style="width:${r.headline_accuracy}%;background:${r.headline_accuracy>70?'var(--green)':r.headline_accuracy>40?'var(--yellow)':'var(--red)'}"></div>
+          </div>
+        </div>
+
+        ${r.headline_vs_content ? `
+        <div class="analysis-section">
+          <h3>🔄 Headline vs Content</h3>
+          <p class="prose">${r.headline_vs_content}</p>
+        </div>` : ''}
+
+        <div class="result-grid" style="margin-bottom:1rem">
+          <div class="result-card">
+            <h3>🚩 Misleading Elements</h3>
+            ${tagsHtml(r.misleading_elements, 'red')}
+          </div>
+          <div class="result-card">
+            <h3>🔥 Emotional Words</h3>
+            ${tagsHtml(r.emotional_words, 'yellow')}
+          </div>
+        </div>
+
+        ${r.improved_headline ? `
+        <div class="analysis-section">
+          <h3>✏️ More Accurate Headline</h3>
+          <div class="improved-headline">"${r.improved_headline}"</div>
+        </div>` : ''}
+      </div>
+    `);
+  } catch(e) {
+    hideSpinner('headline-spinner');
+    showError('headline-error', 'Network error: ' + e.message);
+  }
+}
+
+// ---- COMPARE ----
+async function runCompare() {
+  const s1 = document.getElementById('story1-input').value.trim();
+  const s2 = document.getElementById('story2-input').value.trim();
+  if (!s1 || !s2) return showError('compare-error', 'Please enter both stories.');
+  clearError('compare-error');
+  document.getElementById('compare-results').classList.add('hidden');
+  showSpinner('compare-spinner');
+
+  try {
+    const res = await fetch('/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story1: s1, story2: s2 })
+    });
+    const data = await res.json();
+    hideSpinner('compare-spinner');
+    if (!data.success) return showError('compare-error', data.error);
+    const r = data.result;
+
+    const biasPos = { LEFT: 5, CENTER: 50, RIGHT: 95, UNKNOWN: 50 };
+    const biasColor = { LEFT: '#3b82f6', CENTER: '#6b7280', RIGHT: '#ef4444', UNKNOWN: '#8b5cf6' };
+
+    showResult('compare-results', `
+      <div class="card">
+        <div class="compare-grid">
+          <div class="result-card">
+            <h3>📰 Story 1 Bias</h3>
+            <span class="tag" style="background:${biasColor[r.story1_bias]}20;color:${biasColor[r.story1_bias]};border-color:${biasColor[r.story1_bias]}40;font-size:1rem;padding:6px 16px">${r.story1_bias}</span>
+          </div>
+          <div class="result-card">
+            <h3>📰 Story 2 Bias</h3>
+            <span class="tag" style="background:${biasColor[r.story2_bias]}20;color:${biasColor[r.story2_bias]};border-color:${biasColor[r.story2_bias]}40;font-size:1rem;padding:6px 16px">${r.story2_bias}</span>
+          </div>
+        </div>
+
+        <div class="analysis-section" style="margin-bottom:1rem">
+          <h3>⚖️ Overall Analysis</h3>
+          <p class="prose">${r.overall_analysis}</p>
+        </div>
+
+        <div class="compare-grid">
+          <div class="result-card">
+            <h3>🔍 Omissions in Story 1</h3>
+            ${tagsHtml(r.omissions_story1, 'yellow')}
+          </div>
+          <div class="result-card">
+            <h3>🔍 Omissions in Story 2</h3>
+            ${tagsHtml(r.omissions_story2, 'yellow')}
+          </div>
+        </div>
+
+        <div class="result-grid" style="margin-top:1rem">
+          <div class="result-card">
+            <h3>✅ Common Facts</h3>
+            ${tagsHtml(r.common_facts, 'green')}
+          </div>
+          <div class="result-card">
+            <h3>⚡ Contradictions</h3>
+            ${tagsHtml(r.contradictions, 'red')}
+          </div>
+          <div class="result-card">
+            <h3>📊 Key Differences</h3>
+            ${tagsHtml(r.key_differences, 'blue')}
+          </div>
+        </div>
+
+        <div class="analysis-section" style="margin-top:1rem;border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.05)">
+          <h3>🏆 More Complete Coverage: <span style="color:var(--accent)">${r.more_complete}</span></h3>
+          <p class="prose">${r.recommendation}</p>
+        </div>
+      </div>
+    `);
+  } catch(e) {
+    hideSpinner('compare-spinner');
+    showError('compare-error', 'Network error: ' + e.message);
+  }
+}
+
+// ---- SOCIAL MEDIA ----
+async function runSocial() {
+  const post = document.getElementById('social-input').value.trim();
+  if (!post) return showError('social-error', 'Please enter a post to analyze.');
+  clearError('social-error');
+  document.getElementById('social-results').classList.add('hidden');
+  showSpinner('social-spinner');
+
+  try {
+    const res = await fetch('/social-media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post })
+    });
+    const data = await res.json();
+    hideSpinner('social-spinner');
+    if (!data.success) return showError('social-error', data.error);
+    const r = data.result;
+
+    const shareLabel = { SHARE:'✅ Safe to Share', DO_NOT_SHARE:'❌ Do Not Share', SHARE_WITH_CAUTION:'⚠️ Share With Caution' };
+
+    showResult('social-results', `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:1.25rem">
+          <span class="verdict-badge verdict-${r.verdict}">${r.verdict}</span>
+          <span class="share-badge share-${r.share_advice}">${shareLabel[r.share_advice]||r.share_advice}</span>
+          <span style="color:var(--text2);font-size:0.85rem">Confidence: <strong style="color:${confidenceColor(r.confidence)}">${r.confidence}%</strong></span>
+        </div>
+
+        <div class="result-grid">
+          <div class="result-card">
+            <h3>🚩 Red Flags</h3>
+            ${tagsHtml(r.red_flags, 'red')}
+          </div>
+          <div class="result-card">
+            <h3>🔄 Viral Misinformation Patterns</h3>
+            ${tagsHtml(r.viral_misinformation_patterns, 'yellow')}
+          </div>
+          <div class="result-card">
+            <h3>🔗 Chain Message Indicators</h3>
+            ${tagsHtml(r.chain_message_indicators, 'purple')}
+          </div>
+          <div class="result-card">
+            <h3>⏰ Urgency Tactics</h3>
+            ${tagsHtml(r.urgency_tactics, 'red')}
+          </div>
+        </div>
+
+        ${r.fact_check_points && r.fact_check_points.length ? `
+        <div class="analysis-section" style="margin-top:1rem">
+          <h3>✔️ Fact Check Points</h3>
+          <table class="fact-table">
+            <tr><th>Claim</th><th>Assessment</th><th>Explanation</th></tr>
+            ${r.fact_check_points.map(f => `
+              <tr>
+                <td style="font-size:0.82rem">${f.claim}</td>
+                <td><span class="assessment-badge assessment-${f.assessment}">${f.assessment}</span></td>
+                <td style="font-size:0.82rem;color:var(--text2)">${f.explanation}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>` : ''}
+
+        ${r.previous_versions ? `
+        <div class="analysis-section" style="margin-top:1rem">
+          <h3>📜 Previous Versions / Known Hoaxes</h3>
+          <p class="prose">${r.previous_versions}</p>
+        </div>` : ''}
+
+        <div class="analysis-section" style="margin-top:1rem;border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.05)">
+          <h3>💡 Recommendation</h3>
+          <p class="prose">${r.recommendation}</p>
+        </div>
+      </div>
+    `);
+  } catch(e) {
+    hideSpinner('social-spinner');
+    showError('social-error', 'Network error: ' + e.message);
+  }
+}
+
+// ---- AI TEXT DETECTOR ----
+async function runAIDetect() {
+  const text = document.getElementById('ai-input').value.trim();
+  if (!text) return showError('ai-error', 'Please enter text to analyze.');
+  if (text.length < 50) return showError('ai-error', 'Please provide more text for accurate detection.');
+  clearError('ai-error');
+  document.getElementById('ai-results').classList.add('hidden');
+  showSpinner('ai-spinner');
+
+  try {
+    const res = await fetch('/detect-ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    hideSpinner('ai-spinner');
+    if (!data.success) return showError('ai-error', data.error);
+    const r = data.result;
+
+    const prob = r.ai_generated_probability;
+    const probColor = prob >= 70 ? 'var(--red)' : prob >= 40 ? 'var(--yellow)' : 'var(--green)';
+    const verdictColor = { LIKELY_HUMAN:'var(--green)', POSSIBLY_AI:'var(--yellow)', LIKELY_AI:'var(--red)', UNCERTAIN:'var(--purple)' };
+
+    showResult('ai-results', `
+      <div class="card">
+        <div style="margin-bottom:1.25rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="verdict-badge" style="background:${verdictColor[r.verdict]}20;color:${verdictColor[r.verdict]};border-color:${verdictColor[r.verdict]}40">
+            🤖 ${r.verdict.replace(/_/g,' ')}
+          </span>
+        </div>
+
+        <div class="result-card" style="margin-bottom:1rem">
+          <h3>📊 AI Generation Probability</h3>
+          <div class="score-meter">
+            <span class="score-value" style="color:${probColor}">${prob}%</span>
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:${prob}%;background:${probColor}"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="analysis-section">
+          <h3>✍️ Writing Style Analysis</h3>
+          <p class="prose">${r.writing_style_analysis}</p>
+        </div>
+
+        <div class="result-grid" style="margin-top:1rem">
+          <div class="result-card">
+            <h3>🔍 AI Indicators</h3>
+            ${tagsHtml(r.indicators, prob >= 50 ? 'red' : 'green')}
+          </div>
+          <div class="result-card">
+            <h3>⚡ Inconsistencies</h3>
+            ${tagsHtml(r.inconsistencies, 'yellow')}
+          </div>
+        </div>
+      </div>
+    `);
+  } catch(e) {
+    hideSpinner('ai-spinner');
+    showError('ai-error', 'Network error: ' + e.message);
+  }
+}
+</script>
 </body>
 </html>
