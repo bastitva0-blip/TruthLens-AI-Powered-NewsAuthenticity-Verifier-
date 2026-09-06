@@ -11,7 +11,7 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', DEFAULT_GEMINI_API_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """You are an expert fact-checker, news authenticity analyst, and investigative journalist assistant. Your job is to analyze news articles or claims and determine their authenticity, credibility, and potential bias.
-
+you main idea is to classify information in various categories such as
 When analyzing news, you must respond with a valid JSON object (and nothing else) in the following format:
 {
   "verdict": "REAL" | "FAKE" | "MISLEADING" | "UNVERIFIABLE" | "SATIRE",
